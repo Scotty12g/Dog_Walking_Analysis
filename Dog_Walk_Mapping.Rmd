@@ -1,0 +1,88 @@
+---
+title: "Mapping Lucy's 1s and 2s"
+output: html_notebook
+---
+
+I recently thought it would be interesting to map where and when my dog goes to the bathroom... I know, let's not dive too deep into why. Nevertheless, I had noticed  my dog, "Lucy", tended to pee in the same spot every day, and so I wanted to test this quantitatively. For a week, I marked where (longitude and latitude) and "what" she did during our walks - referring to the "what" as either "#1" or "#2" to maintain at least a hint of maturity with this analysis.
+
+
+One problem I encountered during data collection was that, occasionally, I walked Lucy on a different route than normal. These walks were too infrequent for a reasonable sample size to test the 1s and 2s of dog walking, and so I started my analysis by sub-setting the data by only our normal walking route (route 1).
+```{r, message=FALSE, warning=FALSE}
+# Import the data
+
+gps.dat<-read.csv("/Users/scottmorello/Dropbox/Archives/Personal/Random Analysis/Random_Personal_Work/Dog_Walk_Data/GPS_data.csv")
+
+# Make "Type" a factor, since it reflects going #1 or #2
+gps.dat$Type<-factor(gps.dat$Type)
+
+# Just take the data from route 1
+gps.dat.sub<-subset(gps.dat,Route==1)
+```
+
+My next step was plotting the actual locations of #1s and #2s on a map. The package "ggmap" is a wonderful tool that integrates easily accessible mapping services (e.g., Google maps) into "ggplot" visualizations. With "ggmap" you can easily constrain your map boundaries by providing an address and a zoom value (integer from 3 to 21 for continental to a building level scale respectively).
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+myaddress<-"2 Beach Bluff Ave, Swampscott, MA 01907"
+```
+
+```{r, message=FALSE, warning=FALSE}
+# Load ggplot and ggmap
+library(ggplot2)
+library(ggmap)
+
+# Get the map surrounding my address (please note that I have hidden my actual address, even though you can gauge the general vicinityt from the map below).
+local.map <- get_map(location = myaddress, zoom = 18)
+
+#Plot it with the gps data
+ggmap(local.map) +
+  geom_point(data=gps.dat.sub,aes(x =Longitude, y =Latitude, colour=Type),size=3) +
+  scale_colour_manual(values=c("black","red"))
+```
+
+
+The GPS data seemed very clustered, as I expected. To test this quantitatively however, we need the pairwise distances between all points. We calculate this just using euclidean distance, since at this small a spatial scale, we don't need to account for the curvature of the earth.
+```{r, message=FALSE, warning=FALSE}
+
+# calculate the pairwise distances between gps points
+dog.dist<-dist(gps.dat.sub[,c(6:7)],method = "euclidean",diag=TRUE)
+dog.dist
+```
+
+Now that we have pairwise distances among all GPS points, we can compare the distributions of distances between each #1 and all other #1s, between each #2 and all other #2s, and between each #1 and all #2s. This partitions all the variance in distance among all points into variation within each group (#1 or #2), and between each group, telling us if #1s or #2s quantitatively cluster closer to themselves than they do to each other.
+
+We summarize the distance data in a figure below, showing the mean distance for each comparison (#1s vs #1s, #2s vs #2s, #1s vs #2s) along with 95% confidence intervals. If the confidence intervals do not overlap, the distances are different.
+```{r, message=FALSE, warning=FALSE}
+# Figure out which gps points corrorspond to Lucy going #1 or #2
+dog.1<-which(gps.dat.sub$Type==1)
+dog.2<-which(gps.dat.sub$Type==2)
+
+# make a dataset for #1 vs #1, #2 vs #2, and #1 vs #2 distances
+
+dog.dist.1.1<-as.matrix(dog.dist)[dog.1,dog.1]
+dog.dist.1.1<-dog.dist.1.1[lower.tri(dog.dist.1.1,diag=FALSE)]
+dog.dist.1.1<-as.vector(dog.dist.1.1)
+
+dog.dist.2.2<-as.matrix(dog.dist)[dog.2,dog.2]
+dog.dist.2.2<-dog.dist.2.2[lower.tri(dog.dist.2.2,diag=FALSE)]
+dog.dist.2.2<-as.vector(dog.dist.2.2)
+
+dog.dist.1.2<-as.matrix(dog.dist)[dog.1,dog.2]
+dog.dist.1.2<-dog.dist.1.2[lower.tri(dog.dist.1.2,diag=FALSE)]
+dog.dist.1.2<-as.vector(dog.dist.1.2)
+
+dog.dist.all<-rbind(data.frame(Comaprison=rep("#1 vs #1",times=length(dog.dist.1.1)),Distance=dog.dist.1.1),
+data.frame(Comaprison=rep("#2 vs #2",times=length(dog.dist.2.2)),Distance=dog.dist.2.2),
+data.frame(Comaprison=rep("#1 vs #2",times=length(dog.dist.1.2)),Distance=dog.dist.1.2))
+
+#Now summarize the data by mean and Standard Error so we can calculate 95% confidence intervals
+library(plyr)
+dog.dist.all.sum<-ddply(dog.dist.all,.(Comaprison),summarize,Mean_Distance=mean(Distance),SE=(sd(Distance)/sqrt(length(Distance))))
+
+ggplot(dog.dist.all.sum,aes(x=Comaprison,y=Mean_Distance,ymin=(Mean_Distance-(1.96*SE)),ymax=(Mean_Distance+(1.96*SE))))+
+  geom_pointrange(size=1.5)+
+  ylab("Distance (mean +/- 95% CI)")+
+  theme_bw()
+```
+
+The results tell us that, indeed, Lucy did #1s and #2s close to the same place every time, although #2s were somewhat more dispersed (slightly larger distance between them). The locations for #1s and #2s differed though, and based on the map, it seems she does #1s on the southern end of the block, and #2s on the northern end of the block. The results could easily be influenced by the direction I walked Lucy, which was south to north. It's conceivable that she just does #1s first, #2s second, and that the time it takes her to realize she needs to do either is pretty consistent. Based on general dog behavior though, dogs prefer to go #1 where other dogs have previously. Lucy could be stuck in an loop where she's just smelling her #1 from the prior walk, and deciding to mark the same spot.
+
+OK... I think that's more than enough discussion of my dog's bathroom habits. Hope you enjoyed the analysis!
