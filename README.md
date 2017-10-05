@@ -1,6 +1,6 @@
 # Dog_Walking_Analysis
 
-Optimized a random forest to predict shark species based on fossil data, and used logistic regression and evolutionary distances to understand misclassifications.
+Explored spatial clustering in my dog’s bathroom behaviors with distance metrics.
 
 To view the HTML rendering of this code, please visit:
 
